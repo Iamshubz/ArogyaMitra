@@ -2,7 +2,9 @@
 
 Healthcare in Your Language, Care for Everyone.
 
-An individual 8-week implementation of the Infosys Springboard healthcare assistance project.
+AI-Driven Healthcare Assistance Platform for Rural
+Communities with Multilingual Medical
+Communication Support.
 
 ## Stack
 - Frontend: React + TypeScript + Vite
