@@ -16,9 +16,8 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 def get_user_response(user: User) -> UserResponse:
-    age = user.patient_profile.age if user.patient_profile else None
-    facility_name = user.worker_profile.facility_name if user.worker_profile else None
-    specialization = user.worker_profile.specialization if user.worker_profile else None
+    patient = user.patient_profile
+    worker = user.worker_profile
     return UserResponse(
         id=user.id,
         full_name=user.full_name,
@@ -27,9 +26,14 @@ def get_user_response(user: User) -> UserResponse:
         role=user.role,
         is_active=user.is_active,
         preferred_language=user.preferred_language,
-        age=age,
-        facility_name=facility_name,
-        specialization=specialization,
+        age=patient.age if patient else None,
+        date_of_birth=patient.date_of_birth if patient else None,
+        gender=patient.gender if patient else None,
+        address=(patient.address if patient else None) or (worker.address if worker else None),
+        facility_name=worker.facility_name if worker else None,
+        specialization=worker.specialization if worker else None,
+        designation=worker.designation if worker else None,
+        worker_approved=worker.is_approved if worker else None,
     )
 
 
@@ -55,12 +59,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenRe
         select(LanguagePreference).where(LanguagePreference.code == payload.preferred_language)
     )
     if language is None:
-        language = LanguagePreference(
-            code=payload.preferred_language,
-            name=payload.preferred_language.upper(),
-        )
-        db.add(language)
-        db.flush()
+        raise HTTPException(status_code=422, detail="Unsupported preferred language")
 
     user = User(
         full_name=payload.full_name.strip(),
@@ -73,9 +72,21 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenRe
     db.add(user)
     db.flush()
     if payload.role == "patient":
-        db.add(PatientProfile(user_id=user.id, age=payload.age))
+        db.add(PatientProfile(
+            user_id=user.id,
+            age=payload.age,
+            date_of_birth=payload.date_of_birth,
+            gender=payload.gender,
+            address=payload.address,
+        ))
     else:
-        db.add(HealthcareWorkerProfile(user_id=user.id))
+        db.add(HealthcareWorkerProfile(
+            user_id=user.id,
+            designation=payload.designation,
+            facility_name=payload.facility_name,
+            address=payload.address,
+            is_approved=False,
+        ))
     db.commit()
     user = load_user(db, user.id)
     if user is None:

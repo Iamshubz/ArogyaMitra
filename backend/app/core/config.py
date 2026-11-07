@@ -1,3 +1,6 @@
+from typing import Optional
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +12,10 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-this-development-secret-key-32"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    supabase_url: Optional[str] = None
+    supabase_service_role_key: Optional[str] = Field(default=None, repr=False)
+    storage_bucket: str = "medical-documents"
+    max_upload_size: int = 10 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

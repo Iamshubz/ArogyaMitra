@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -14,8 +15,13 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     phone_number: Optional[str] = Field(default=None, max_length=30)
     age: Optional[int] = Field(default=None, ge=0, le=130)
+    date_of_birth: Optional[date] = None
+    gender: Optional[str] = Field(default=None, max_length=30)
+    address: Optional[str] = Field(default=None, max_length=300)
     preferred_language: str = Field(default="en", min_length=2, max_length=10)
     role: Literal["patient", "healthcare_worker"] = "patient"
+    designation: Optional[str] = Field(default=None, max_length=160)
+    facility_name: Optional[str] = Field(default=None, max_length=160)
 
 
 class LoginRequest(BaseModel):
@@ -43,6 +49,11 @@ class UserResponse(BaseModel):
     age: Optional[int] = None
     facility_name: Optional[str] = None
     specialization: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    gender: Optional[str] = None
+    address: Optional[str] = None
+    designation: Optional[str] = None
+    worker_approved: Optional[bool] = None
 
 
 class TokenResponse(BaseModel):
@@ -56,5 +67,9 @@ class ProfileUpdateRequest(BaseModel):
     phone_number: Optional[str] = Field(default=None, max_length=30)
     preferred_language: str = Field(min_length=2, max_length=10)
     age: Optional[int] = Field(default=None, ge=0, le=130)
+    date_of_birth: Optional[date] = None
+    gender: Optional[str] = Field(default=None, max_length=30)
+    address: Optional[str] = Field(default=None, max_length=300)
     facility_name: Optional[str] = Field(default=None, max_length=160)
     specialization: Optional[str] = Field(default=None, max_length=160)
+    designation: Optional[str] = Field(default=None, max_length=160)

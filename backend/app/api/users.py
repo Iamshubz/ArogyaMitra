@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -28,12 +28,7 @@ def update_profile(
         select(LanguagePreference).where(LanguagePreference.code == payload.preferred_language)
     )
     if language is None:
-        language = LanguagePreference(
-            code=payload.preferred_language,
-            name=payload.preferred_language.upper(),
-        )
-        db.add(language)
-        db.flush()
+        raise HTTPException(status_code=422, detail="Unsupported preferred language")
     current_user.full_name = payload.full_name.strip()
     current_user.phone_number = payload.phone_number
     current_user.preferred_language_id = language.id
@@ -41,11 +36,16 @@ def update_profile(
         if current_user.patient_profile is None:
             current_user.patient_profile = PatientProfile()
         current_user.patient_profile.age = payload.age
+        current_user.patient_profile.date_of_birth = payload.date_of_birth
+        current_user.patient_profile.gender = payload.gender
+        current_user.patient_profile.address = payload.address
     elif current_user.role == "healthcare_worker":
         if current_user.worker_profile is None:
             current_user.worker_profile = HealthcareWorkerProfile()
         current_user.worker_profile.facility_name = payload.facility_name
         current_user.worker_profile.specialization = payload.specialization
+        current_user.worker_profile.designation = payload.designation
+        current_user.worker_profile.address = payload.address
     db.commit()
     refreshed = db.scalar(
         select(User)

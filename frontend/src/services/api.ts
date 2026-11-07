@@ -29,6 +29,11 @@ export type AuthUser = {
   age: number | null
   facility_name: string | null
   specialization: string | null
+  date_of_birth: string | null
+  gender: string | null
+  address: string | null
+  designation: string | null
+  worker_approved: boolean | null
 }
 
 type AuthResponse = {
@@ -48,8 +53,13 @@ export async function registerAccount(payload: {
   password: string
   phone_number?: string
   age?: number
+  date_of_birth?: string
+  gender?: string
+  address?: string
   preferred_language: string
   role: 'patient' | 'healthcare_worker'
+  designation?: string
+  facility_name?: string
 }): Promise<AuthResponse> {
   const response = await api.post<AuthResponse>('/api/v1/auth/register', payload)
   return response.data
@@ -70,8 +80,12 @@ export async function updateProfile(payload: {
   phone_number: string
   preferred_language: string
   age?: number
+  date_of_birth?: string
+  gender?: string
+  address?: string
   facility_name?: string
   specialization?: string
+  designation?: string
 }): Promise<AuthUser> {
   const response = await api.put<AuthUser>('/api/v1/users/profile', payload)
   return response.data
