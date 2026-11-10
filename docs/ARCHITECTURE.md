@@ -28,6 +28,12 @@ AI services (later): OCR -> extraction -> human verification -> simplification
                     -> translation -> text-to-speech / speech-to-text
 ```
 
+The Phase 3 local AI adapter is exposed through `/api/v1/ai/*`. It provides
+safe deterministic terminology, translation, extraction, symptom guidance, and
+language-based content recommendations without sending patient text to an
+external provider. Translation and entity extraction records are persisted when
+linked to an authorized medical document and remain marked for human review.
+
 ## 2. Backend module boundaries
 - `api`: versioned HTTP endpoints.
 - `core`: configuration and shared security utilities.
@@ -68,4 +74,7 @@ AI services (later): OCR -> extraction -> human verification -> simplification
 - JSON responses for application data.
 - OpenAPI docs at `/docs` in local development.
 - Initial endpoints: `GET /api/v1/health`, `/api/v1/auth/*` and `/api/v1/users/profile`.
-- Planned endpoints: `/auth`, `/patients/me`, `/workers/me`, `/documents`, `/translations`, `/medication-schedules`, `/reminders`, `/health-content`, `/admin/analytics`.
+- Current AI endpoints: `/ai/translation`, `/ai/simplification`, `/ai/extract`, `/ai/symptoms`, `/ai/recommendations`.
+- Worker endpoints: `/worker/patients`, `/worker/follow-ups`, and authorized translation history.
+- Admin endpoints: `/admin/analytics`, `/admin/system`, and content lifecycle operations.
+- Planned endpoints: `/auth`, `/patients/me`, `/workers/me`, `/documents`, `/medication-schedules`, `/reminders`, `/admin/analytics`.

@@ -11,9 +11,10 @@ from app.db.session import Base
 
 class LanguagePreference(Base):
     __tablename__ = "language_preferences"
+    __table_args__ = (Index("ix_language_preferences_code", "code"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    code: Mapped[str] = mapped_column(String(10), unique=True, index=True)
+    code: Mapped[str] = mapped_column(String(10), unique=True)
     name: Mapped[str] = mapped_column(String(80))
 
     users: Mapped[list["User"]] = relationship(back_populates="preferred_language")
@@ -21,10 +22,11 @@ class LanguagePreference(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (Index("ix_users_email", "email"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     full_name: Mapped[str] = mapped_column(String(120))
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     phone_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     role: Mapped[str] = mapped_column(String(30), default="patient")
@@ -157,3 +159,112 @@ class HealthcareContent(Base):
     publication_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class DocumentTranslation(Base):
+    __tablename__ = "document_translations"
+    __table_args__ = (Index("ix_document_translations_document_target", "document_id", "target_language"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("medical_documents.id"), nullable=False)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    source_language: Mapped[str] = mapped_column(String(10), nullable=False)
+    target_language: Mapped[str] = mapped_column(String(10), nullable=False)
+    original_text: Mapped[str] = mapped_column(Text, nullable=False)
+    translated_text: Mapped[str] = mapped_column(Text, nullable=False)
+    review_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExtractedMedicalEntity(Base):
+    __tablename__ = "extracted_medical_entities"
+    __table_args__ = (Index("ix_extracted_entities_document", "document_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("medical_documents.id"), nullable=False)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    value: Mapped[str] = mapped_column(String(200), nullable=False)
+    context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confidence: Mapped[str] = mapped_column(String(20), default="low", nullable=False)
+    review_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AIProcessingLog(Base):
+    __tablename__ = "ai_processing_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    operation: Mapped[str] = mapped_column(String(40), nullable=False)
+    input_language: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    output_language: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    provider: Mapped[str] = mapped_column(String(40), default="local", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MedicationReminder(Base):
+    __tablename__ = "medication_reminders"
+    __table_args__ = (Index("ix_medication_reminders_patient_schedule", "patient_id", "scheduled_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    medication_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    dosage: Mapped[str] = mapped_column(String(120), nullable=False)
+    instructions: Mapped[str] = mapped_column(Text, nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="scheduled", nullable=False)
+    delivery_status: Mapped[str] = mapped_column(String(20), default="not_sent", nullable=False)
+    taken_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Bookmark(Base):
+    __tablename__ = "bookmarks"
+    __table_args__ = (Index("ix_bookmarks_user_content", "user_id", "content_id", unique=True),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    content_id: Mapped[int] = mapped_column(ForeignKey("healthcare_contents.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EmergencyContact(Base):
+    __tablename__ = "emergency_contacts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    phone_number: Mapped[str] = mapped_column(String(30), nullable=False)
+    region: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class HealthcareFacility(Base):
+    __tablename__ = "healthcare_facilities"
+    __table_args__ = (Index("ix_healthcare_facilities_region", "region"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    facility_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    address: Mapped[str] = mapped_column(String(300), nullable=False)
+    region: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class FollowUpRecord(Base):
+    __tablename__ = "follow_up_records"
+    __table_args__ = (Index("ix_follow_up_records_patient_due", "patient_id", "due_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    worker_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="scheduled", nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

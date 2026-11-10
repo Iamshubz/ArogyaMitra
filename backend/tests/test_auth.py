@@ -1,4 +1,5 @@
 import os
+from uuid import uuid4
 
 os.environ["DATABASE_URL"] = "sqlite:///./test_arogyamitra.db"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-with-at-least-32-bytes"
@@ -34,7 +35,7 @@ client = TestClient(app)
 
 
 def test_register_login_and_profile():
-    email = "test.patient@example.com"
+    email = f"test.patient-{uuid4().hex}@example.com"
     response = client.post(
         "/api/v1/auth/register",
         json={
