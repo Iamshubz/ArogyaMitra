@@ -19,6 +19,8 @@ import {
   listWorkerFollowUps,
   simplifyMedicalText,
   translateMedicalText,
+  chatWithPatient,
+  analyzeMedicalImage,
   type FollowUp,
   type PatientSummary,
   type HealthContent,
@@ -28,12 +30,6 @@ import {
 type Connection = 'checking' | 'connected' | 'offline'
 
 type View = 'dashboard' | 'login' | 'register' | 'profile' | 'workspace'
-
-const roleNavigation: Record<AuthUser['role'], string[]> = {
-  patient: ['Dashboard', 'AI assistant', 'Medical records', 'Reminders', 'Health education'],
-  healthcare_worker: ['Dashboard', 'Patients', 'Consultations', 'Health education', 'Notifications'],
-  admin: ['Dashboard', 'Users', 'Content management', 'System monitoring', 'Analytics'],
-}
 
 export default function App() {
   const [connection, setConnection] = useState<Connection>('checking')
@@ -76,33 +72,53 @@ export default function App() {
     return <div className="loading-page">Loading your secure workspace...</div>
   }
 
-  return (
-    <main className="app-shell">
+  const openWorkspace = () => setView('workspace')
+  return <main className="app-shell">
+    <Sidebar user={user} activeView={view} onDashboard={() => setView('dashboard')} onWorkspace={openWorkspace} onProfile={() => setView('profile')} onSignOut={signOut} />
+    <div className="content-shell">
       <header className="topbar">
-        <a className="brand" href="#dashboard" aria-label="ArogyaMitra dashboard" onClick={() => setView('dashboard')}>
-          <span className="brand-mark">+</span><span>Arogya<span className="brand-light">Mitra</span></span>
-        </a>
-        <nav className="top-actions" aria-label="Account navigation">
+        <div className="mobile-brand"><span className="brand-mark">+</span><span>Arogya<span className="brand-light">Mitra</span></span></div>
+        <div className="top-actions">
           <span className={`connection connection-${connection}`}><span className="dot" />{connection === 'connected' ? 'System online' : connection === 'checking' ? 'Checking system' : 'Offline mode'}</span>
-          <button className="link-button" onClick={() => setView('profile')}>My profile</button>
-          <button className="outline-button small-button" onClick={signOut}>Log out</button>
-        </nav>
+          <button className="language-control" aria-label="Current language">◎ {user.preferred_language.name}⌄</button>
+          <button className="icon-button" aria-label="Notifications">♧</button>
+          <button className="avatar-button" onClick={() => setView('profile')} aria-label="Open profile">{user.full_name.charAt(0).toUpperCase()}</button>
+        </div>
       </header>
-
       {view === 'profile'
         ? <ProfilePage user={user} onUpdated={setUser} onBack={() => setView('dashboard')} />
         : view === 'workspace'
           ? <WorkspaceNotice user={user} onBack={() => setView('dashboard')} />
-          : <Dashboard user={user} onProfile={() => setView('profile')} onWorkspace={() => setView('workspace')} />}
+          : <Dashboard user={user} onProfile={() => setView('profile')} onWorkspace={openWorkspace} />}
       <footer><span>ArogyaMitra · Healthcare in Your Language, Care for Everyone.</span><span>Information support only. Healthcare professionals remain responsible for clinical decisions.</span></footer>
-    </main>
-  )
+    </div>
+  </main>
+}
+
+function Sidebar({ user, activeView, onDashboard, onWorkspace, onProfile, onSignOut }: { user: AuthUser; activeView: View; onDashboard: () => void; onWorkspace: () => void; onProfile: () => void; onSignOut: () => void }) {
+  const items = user.role === 'patient'
+    ? [['Dashboard', '⌂'], ['AI Health Assistant', '◌'], ['Medical Translation', '文'], ['Report Analysis', '▤'], ['Symptom Guidance', '♧'], ['Medication Reminders', '◷'], ['My Health Records', '▱'], ['Emergency Assistance', '⚠'], ['Health Education', '▤']]
+    : user.role === 'healthcare_worker'
+      ? [['Dashboard', '⌂'], ['Patients', '♙'], ['Consultations', '◌'], ['Health Education', '▤'], ['Notifications', '♧']]
+      : [['Dashboard', '⌂'], ['Users', '♙'], ['Content Management', '▤'], ['System Monitoring', '◌'], ['Analytics', '▥']]
+  return <aside className="sidebar">
+    <button className="brand sidebar-brand" onClick={onDashboard}><span className="brand-mark">+</span><span>Arogya<span className="brand-light">Mitra</span><small>Your AI Healthcare Companion</small></span></button>
+    <nav className="sidebar-nav" aria-label="Primary navigation">
+      {items.map(([label, icon], index) => <button key={label} className={(index === 0 && activeView === 'dashboard') || (index > 0 && activeView === 'workspace') ? 'sidebar-active' : ''} onClick={index === 0 ? onDashboard : onWorkspace}><span>{icon}</span>{label}</button>)}
+    </nav>
+    <div className="sidebar-divider" />
+    <nav className="sidebar-nav secondary-nav" aria-label="Account navigation">
+      <button className={activeView === 'profile' ? 'sidebar-active' : ''} onClick={onProfile}><span>♙</span>My Profile</button>
+      <button onClick={onProfile}><span>⚙</span>Settings</button>
+    </nav>
+    <div className="help-card"><strong>Need Help?</strong><span>Call 112 for Emergency</span><a href="tel:112">⌕ &nbsp; Call Now</a></div>
+    <button className="sidebar-logout" onClick={onSignOut}>Log out</button>
+  </aside>
 }
 
 function AuthPage({ mode, onSwitch, onSuccess }: { mode: 'login' | 'register'; onSwitch: () => void; onSuccess: (user: AuthUser, token: string) => void }) {
   const [form, setForm] = useState({ full_name: '', email: '', password: '', phone_number: '', age: '', date_of_birth: '', gender: '', address: '', designation: '', facility_name: '', preferred_language: 'en', role: 'patient' as 'patient' | 'healthcare_worker' })
   const [error, setError] = useState('')
-  const [history, setHistory] = useState<Array<{ id: number; document_id: number; original_text: string; translated_text: string; review_required: boolean }>>([])
   const [submitting, setSubmitting] = useState(false)
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setError(''); setSubmitting(true)
@@ -117,8 +133,34 @@ function AuthPage({ mode, onSwitch, onSuccess }: { mode: 'login' | 'register'; o
 }
 
 function Dashboard({ user, onProfile, onWorkspace }: { user: AuthUser; onProfile: () => void; onWorkspace: () => void }) {
-  const roleTitle = user.role === 'patient' ? 'Patient dashboard' : user.role === 'healthcare_worker' ? 'Healthcare worker dashboard' : 'Administrator dashboard'
-  return <section className="dashboard"><div className="workspace-nav" aria-label={`${roleTitle} navigation`}>{roleNavigation[user.role].map((item) => <button key={item} className={item === 'Dashboard' ? 'workspace-nav-active' : ''} onClick={item === 'Dashboard' ? undefined : onWorkspace}>{item}</button>)}</div><div className="welcome-panel"><div><p className="eyebrow">YOUR AROGYAMITRA WORKSPACE</p><h1>Welcome, {user.full_name.split(' ')[0]}.</h1><p>Healthcare in Your Language, Care for Everyone.</p></div><button className="primary-button" onClick={onProfile}>Manage profile <span>→</span></button></div><div className="dashboard-grid"><article className="info-card"><span className="card-icon">◉</span><h3>{roleTitle}</h3><p>Your secure workspace is ready. Use the navigation above to access role-specific tools.</p><span className="status-label">Foundation complete</span></article><article className="info-card"><span className="card-icon blue">文</span><h3>Language preference</h3><p>You are viewing ArogyaMitra in <strong>{user.preferred_language.name}</strong>.</p><span className="status-label blue-label">Personalized access</span></article><article className="info-card"><span className="card-icon orange">✓</span><h3>Care and privacy</h3><p>Your account data is protected. Do not upload or share information that is not yours.</p><span className="status-label orange-label">Safety first</span></article></div><div className="coming-section"><p className="eyebrow">NEXT MILESTONES</p><h2>More support, step by step</h2><div className="coming-grid"><span>Medical document understanding</span><span>Simple explanations and translation</span><span>Voice-enabled assistance</span></div></div></section>
+  if (user.role === 'patient') return <PatientDashboard user={user} onProfile={onProfile} onWorkspace={onWorkspace} />
+  const isWorker = user.role === 'healthcare_worker'
+  return <section className="dashboard role-dashboard">
+    <div className="role-hero"><div><p className="eyebrow">{isWorker ? 'CLINICAL WORKSPACE' : 'ADMIN WORKSPACE'}</p><h1>Good evening, {user.full_name.split(' ')[0]}.</h1><p>{isWorker ? 'Review your assigned patients and care tasks.' : 'Keep the ArogyaMitra platform healthy and helpful.'}</p></div><button className="primary-button" onClick={onWorkspace}>{isWorker ? 'Open patient management' : 'Open administration'} <span>→</span></button></div>
+    <div className="metric-grid"><article><span>◉</span><strong>{isWorker ? 'Assigned patients' : 'Platform users'}</strong><b>{isWorker ? 'View secure patient list' : 'Review user activity'}</b></article><article><span>◷</span><strong>{isWorker ? 'Follow-ups' : 'Health content'}</strong><b>{isWorker ? 'Track upcoming care' : 'Manage published education'}</b></article><article><span>✓</span><strong>Account status</strong><b>{isWorker ? (user.worker_approved ? 'Approved worker' : 'Awaiting approval') : 'Protected admin access'}</b></article></div>
+    <div className="role-panel"><div><p className="eyebrow">QUICK ACCESS</p><h2>{isWorker ? 'Care coordination tools' : 'Platform controls'}</h2><p>{isWorker ? 'Access is limited to administrator-assigned patients and authorized records.' : 'Use the administration workspace to monitor users, content, and system health.'}</p></div><button className="outline-button" onClick={onProfile}>Manage profile</button></div>
+  </section>
+}
+
+function PatientDashboard({ user, onProfile, onWorkspace }: { user: AuthUser; onProfile: () => void; onWorkspace: () => void }) {
+  const [reminders, setReminders] = useState<Reminder[]>([])
+  const [articles, setArticles] = useState<HealthContent[]>([])
+  const [contacts, setContacts] = useState<Array<{ id: number; name: string; phone_number: string; is_verified: boolean }>>([])
+  useEffect(() => { Promise.all([listReminders(), listHealthContent(user.preferred_language.code), listEmergencyContacts()]).then(([nextReminders, nextArticles, nextContacts]) => { setReminders(nextReminders); setArticles(nextArticles); setContacts(nextContacts) }).catch(() => undefined) }, [user.preferred_language.code])
+  const firstName = user.full_name.split(' ')[0]
+  const quickActions = [{ label: 'AI Health Assistant', icon: '◌', action: onWorkspace }, { label: 'Medical Translation', icon: '文', action: onWorkspace }, { label: 'Report Analysis', icon: '▤', action: onWorkspace }, { label: 'Symptom Guidance', icon: '♧', action: onWorkspace }, { label: 'Medication Reminders', icon: '◷', action: onWorkspace }, { label: 'Emergency Assistance', icon: '⚠', action: onWorkspace }, { label: 'Health Education', icon: '▤', action: onWorkspace }]
+  return <section className="dashboard patient-dashboard">
+    <div className="patient-hero"><div><p className="eyebrow">YOUR HEALTH WORKSPACE</p><h1>Good evening, {firstName}! <span>👋</span></h1><p>How can ArogyaMitra help you today?</p><div className="assistant-search" onClick={onWorkspace}><span>✦</span><span>Ask about your health, symptoms, medicines, or reports...</span><b>→</b></div><div className="suggestion-row"><button onClick={onWorkspace}>Explain my prescription</button><button onClick={onWorkspace}>Translate a medical report</button><button onClick={onWorkspace}>I have a fever</button><button onClick={onWorkspace}>Health tips for diabetes</button></div></div><div className="hero-art" aria-hidden="true">♧<small>Care that speaks your language</small></div></div>
+    <div className="section-heading"><h2>Quick Actions</h2><button className="link-button" onClick={onWorkspace}>View all features →</button></div>
+    <div className="quick-actions">{quickActions.map((item) => <button key={item.label} onClick={item.action}><span>{item.icon}</span>{item.label}</button>)}</div>
+    <div className="dashboard-columns">
+      <article className="dashboard-panel reminders-panel"><div className="section-heading"><h2>◷ &nbsp;My Medication Reminders</h2><button className="link-button" onClick={onWorkspace}>＋ Add</button></div>{reminders.slice(0, 3).map((reminder) => <div className="dashboard-row" key={reminder.id}><span className="row-icon">↗</span><div><strong>{reminder.medication_name} {reminder.dosage}</strong><small>{reminder.instructions}</small></div><time>{new Date(reminder.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>)}{reminders.length === 0 && <p className="empty-state">No upcoming reminders. Add one from patient services.</p>}<button className="panel-link" onClick={onWorkspace}>View all reminders →</button></article>
+      <article className="dashboard-panel"><div className="section-heading"><h2>◷ &nbsp;Recent Activity</h2></div><div className="activity-item"><span className="activity-icon blue">▤</span><div><strong>Patient services ready</strong><small>AI translation, reminders, and voice support</small></div><em>Available now</em></div><div className="activity-item"><span className="activity-icon purple">◌</span><div><strong>Personalized language</strong><small>Content is shown in {user.preferred_language.name}</small></div><em>Active</em></div><div className="activity-item"><span className="activity-icon green">✓</span><div><strong>Privacy protected</strong><small>Your records stay within your authorized workspace</small></div><em>Secure</em></div></article>
+      <article className="dashboard-panel"><div className="section-heading"><h2>⌖ &nbsp;Emergency Assistance</h2><button className="link-button" onClick={onWorkspace}>View all →</button></div><p className="panel-description">For life-threatening situations, call emergency services immediately.</p>{contacts.slice(0, 3).map((contact) => <div className="facility-row" key={contact.id}><span className="row-icon">✚</span><div><strong>{contact.name}</strong><small>{contact.phone_number} · Verified</small></div><a href={`tel:${contact.phone_number}`}>Call</a></div>)}{contacts.length === 0 && <a className="primary-button" href="tel:112">Call 112 now</a>}</article>
+    </div>
+    <div className="lower-dashboard"><article className="assistant-card"><div className="assistant-illustration">◌</div><div><p className="eyebrow">YOUR AI HEALTH ASSISTANT</p><h2>Talk to ArogyaMitra</h2><p>Get answers in simple language, translate reports, and understand your health better.</p><button className="primary-button" onClick={onWorkspace}>Start Chat Now →</button></div></article><article className="dashboard-panel education-panel"><div className="section-heading"><h2>▤ &nbsp;Health Education for You</h2><button className="link-button" onClick={onWorkspace}>View all →</button></div><div className="education-grid">{articles.slice(0, 3).map((article) => <button key={article.id} onClick={onWorkspace}><span className="education-image">{article.category.charAt(0)}</span><strong>{article.title}</strong><small>{article.category} · 5 min read</small></button>)}{articles.length === 0 && <p className="empty-state">Health education will appear here when published.</p>}</div></article></div>
+    <button className="floating-profile" onClick={onProfile} aria-label="Manage profile">✎</button>
+  </section>
 }
 
 function WorkspaceNotice({ user, onBack }: { user: AuthUser; onBack: () => void }) {
@@ -155,6 +197,11 @@ function PatientServices({ user, onBack }: { user: AuthUser; onBack: () => void 
   const [message, setMessage] = useState('')
   const [aiText, setAiText] = useState('')
   const [aiResult, setAiResult] = useState('')
+  const [chatText, setChatText] = useState('')
+  const [chatAnswer, setChatAnswer] = useState('')
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imageResult, setImageResult] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     Promise.all([listReminders(), listHealthContent(user.preferred_language.code), listEmergencyContacts()])
@@ -224,9 +271,34 @@ function PatientServices({ user, onBack }: { user: AuthUser; onBack: () => void 
     }
   }
 
+  const sendChat = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!chatText.trim()) return
+    setBusy(true); setVoiceError('')
+    try {
+      const result = await chatWithPatient(chatText, user.preferred_language.code)
+      setChatAnswer(result.answer)
+    } catch (requestError: any) {
+      setVoiceError(requestError.response?.data?.detail || 'The AI assistant is unavailable.')
+    } finally { setBusy(false) }
+  }
+
+  const analyzeImage = async () => {
+    if (!selectedImage) return
+    setBusy(true); setVoiceError('')
+    try {
+      const result = await analyzeMedicalImage(selectedImage)
+      setImageResult(result.answer)
+    } catch (requestError: any) {
+      setVoiceError(requestError.response?.data?.detail || 'The image could not be analyzed.')
+    } finally { setBusy(false) }
+  }
+
   return <section className="services-page"><button className="link-button back-link" onClick={onBack}>← Back to dashboard</button><div className="page-heading"><p className="eyebrow">PATIENT SERVICES</p><h1>Voice, reminders and health education</h1><p>These tools support communication and organization. They do not diagnose or replace emergency care.</p></div>
     <div className="services-grid">
-      <article className="profile-card"><h3>Medical language support</h3><textarea value={aiText} onChange={(event) => setAiText(event.target.value)} placeholder="Paste a medical term or instruction" /><div className="service-actions"><button className="primary-button" disabled={!aiText.trim()} onClick={() => runAi('simplify')}>Explain simply</button><button className="outline-button" disabled={!aiText.trim()} onClick={() => runAi('translate')}>Translate</button></div>{aiResult && <p className="success-message">{aiResult}</p>}</article>
+      <article className="profile-card"><h3>AI Health Assistant</h3><form className="service-form" onSubmit={sendChat}><textarea value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Ask about symptoms, medicines, or a report" /><button className="primary-button" disabled={!chatText.trim() || busy}>{busy ? 'Working...' : 'Ask ArogyaMitra'}</button></form>{chatAnswer && <p className="success-message">{chatAnswer}</p>}</article>
+      <article className="profile-card"><h3>Explain or translate text</h3><textarea value={aiText} onChange={(event) => setAiText(event.target.value)} placeholder="Paste a medical term or instruction" /><div className="service-actions"><button className="primary-button" disabled={!aiText.trim() || busy} onClick={() => runAi('simplify')}>Explain simply</button><button className="outline-button" disabled={!aiText.trim() || busy} onClick={() => runAi('translate')}>Translate</button></div>{aiResult && <p className="success-message">{aiResult}</p>}</article>
+      <article className="profile-card"><h3>Explain a prescription or report photo</h3><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setSelectedImage(event.target.files?.[0] || null)} /><button className="primary-button" disabled={!selectedImage || busy} onClick={analyzeImage}>{busy ? 'Analyzing...' : 'Analyze uploaded photo'}</button>{imageResult && <p className="success-message">{imageResult}</p>}<p className="muted-text">Upload only your own medical document. The result is informational and requires professional review.</p></article>
       <article className="profile-card"><h3>Voice assistance</h3><p className="muted-text">Use your browser microphone and speech engine. Recognized text stays editable.</p><textarea value={voiceText} onChange={(event) => setVoiceText(event.target.value)} placeholder="Speak or type a question" /><div className="service-actions"><button className="primary-button" onClick={startListening}>Start listening</button><button className="outline-button" onClick={speak}>Read aloud</button></div></article>
       <article className="profile-card"><h3>Medication reminders</h3><form className="service-form" onSubmit={addReminder}><input required placeholder="Medicine name" value={reminderForm.medication_name} onChange={(event) => setReminderForm({ ...reminderForm, medication_name: event.target.value })} /><input required placeholder="Dosage" value={reminderForm.dosage} onChange={(event) => setReminderForm({ ...reminderForm, dosage: event.target.value })} /><input required placeholder="Instructions" value={reminderForm.instructions} onChange={(event) => setReminderForm({ ...reminderForm, instructions: event.target.value })} /><input required type="datetime-local" value={reminderForm.scheduled_at} onChange={(event) => setReminderForm({ ...reminderForm, scheduled_at: event.target.value })} /><button className="primary-button">Save reminder</button></form>{reminders.map((reminder) => <div className="service-row" key={reminder.id}><span><strong>{reminder.medication_name}</strong><small>{reminder.dosage} · {new Date(reminder.scheduled_at).toLocaleString()}</small></span>{reminder.status === 'scheduled' && <button className="link-button" onClick={() => markTaken(reminder.id)}>Mark taken</button>}</div>)}</article>
       <article className="profile-card"><h3>Emergency assistance</h3><p className="muted-text">For life-threatening situations, call emergency services immediately.</p>{contacts.map((contact) => <div className="service-row" key={contact.id}><span><strong>{contact.name}</strong><small>Verified contact</small></span><a className="primary-button" href={`tel:${contact.phone_number}`}>Call {contact.phone_number}</a></div>)}</article>

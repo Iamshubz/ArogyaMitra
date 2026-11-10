@@ -192,6 +192,18 @@ export async function translateMedicalText(text: string, targetLanguage: string)
   return response.data
 }
 
+export async function chatWithPatient(message: string, language: string): Promise<{ answer: string; disclaimer: string }> {
+  const response = await api.post('/api/v1/ai/chat', { message, language })
+  return response.data
+}
+
+export async function analyzeMedicalImage(file: File): Promise<{ filename: string; answer: string; disclaimer: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await api.post('/api/v1/ai/vision', formData)
+  return response.data
+}
+
 export async function listTranslationHistory(patientId: number): Promise<Array<{
   id: number
   document_id: number

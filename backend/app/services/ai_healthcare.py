@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import re
+from typing import Any
+import httpx
 from dataclasses import dataclass
+
+from app.core.config import settings
 
 
 DISCLAIMER = (
@@ -40,6 +44,62 @@ _SIMPLIFICATIONS = {
 _MEDICINES = {"paracetamol", "acetaminophen", "amoxicillin", "metformin", "ibuprofen"}
 _SYMPTOMS = {"fever", "cough", "headache", "pain", "vomiting", "diarrhea", "breathing difficulty"}
 _DOSAGE_PATTERN = re.compile(r"\b\d+(?:\.\d+)?\s?(?:mg|mcg|g|ml|tablet|tablets|capsule|capsules)\b", re.I)
+
+
+def _openai_request(messages: list[dict[str, Any]], image: str | None = None) -> str:
+    if not settings.openai_api_key:
+        raise RuntimeError("AI service is not configured. Set OPENAI_API_KEY in backend/.env.")
+    if image is not None:
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": messages[0]["content"]},
+                    {"type": "image_url", "image_url": {"url": image}},
+                ],
+            }
+        ]
+    try:
+        response = httpx.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+            json={"model": settings.openai_model, "messages": messages, "temperature": 0.2},
+            timeout=45,
+        )
+        response.raise_for_status()
+        body = response.json()
+        answer = body["choices"][0]["message"]["content"]
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+        raise RuntimeError("The AI provider could not process this request.") from exc
+    if not isinstance(answer, str) or not answer.strip():
+        raise RuntimeError("The AI provider returned an empty response.")
+    return answer.strip()
+
+
+def chat_with_patient(message: str, language: str) -> str:
+    return _openai_request([{
+        "role": "system",
+        "content": (
+            "You are ArogyaMitra, a cautious healthcare information assistant. "
+            "Answer in the requested language when possible. Do not diagnose, prescribe, "
+            "or tell the patient to change medication. Encourage a clinician for personal "
+            "medical decisions and emergency services for urgent symptoms. "
+            f"Requested language: {language}."
+        ),
+    }, {"role": "user", "content": message}])
+
+
+def analyze_medical_image(content_type: str, content: bytes, language: str) -> str:
+    import base64
+
+    encoded = base64.b64encode(content).decode("ascii")
+    prompt = (
+        "Read this medical image (prescription, label, or report) and explain only what is "
+        "clearly visible in simple language. Transcribe important text, medicines, dosage, "
+        "and dates when legible. Mark uncertain text as uncertain. Never invent missing "
+        f"details and do not diagnose or prescribe. Respond in {language}."
+    )
+    return _openai_request([{"role": "user", "content": prompt}], f"data:{content_type};base64,{encoded}")
 
 
 def translate_text(text: str, source: str, target: str) -> str:

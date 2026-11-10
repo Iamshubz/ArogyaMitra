@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,8 +23,19 @@ from app.schemas.ai import (
     SymptomResponse,
     TextProcessingRequest,
     TranslationResponse,
+    ChatRequest,
+    ChatResponse,
+    VisionResponse,
 )
-from app.services.ai_healthcare import DISCLAIMER, extract_entities, simplify_text, symptom_guidance, translate_text
+from app.services.ai_healthcare import (
+    DISCLAIMER,
+    analyze_medical_image,
+    chat_with_patient,
+    extract_entities,
+    simplify_text,
+    symptom_guidance,
+    translate_text,
+)
 
 router = APIRouter(prefix="/ai", tags=["AI healthcare assistance"])
 
@@ -157,3 +168,34 @@ def recommendations(current_user: User = Depends(get_current_user), db: Session 
         reason="Recommendations are based only on your language preference and published health education content.",
         disclaimer=DISCLAIMER,
     )
+
+
+@router.post("/chat", response_model=ChatResponse)
+def chat(payload: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ChatResponse:
+    try:
+        answer = chat_with_patient(payload.message, payload.language)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    _log(db, current_user.id, "chat", payload.language, payload.language)
+    db.commit()
+    return ChatResponse(answer=answer, disclaimer=DISCLAIMER)
+
+
+@router.post("/vision", response_model=VisionResponse)
+async def vision(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> VisionResponse:
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=415, detail="Upload a JPG, PNG, or WEBP image")
+    content = await file.read(10 * 1024 * 1024 + 1)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image exceeds the 10 MB limit")
+    try:
+        answer = analyze_medical_image(file.content_type, content, current_user.preferred_language.code)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    _log(db, current_user.id, "image_analysis", current_user.preferred_language.code)
+    db.commit()
+    return VisionResponse(filename=file.filename or "medical-image", answer=answer, disclaimer=DISCLAIMER)

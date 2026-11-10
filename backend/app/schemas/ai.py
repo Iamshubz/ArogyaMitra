@@ -66,3 +66,19 @@ class RecommendationResponse(BaseModel):
     items: list[Dict[str, Union[str, int]]]
     reason: str
     disclaimer: str
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=12000)
+    language: LanguageCode = "en"
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    disclaimer: str
+
+
+class VisionResponse(BaseModel):
+    filename: str
+    answer: str
+    disclaimer: str

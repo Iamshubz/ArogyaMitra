@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 from pydantic import Field, model_validator
@@ -16,8 +17,14 @@ class Settings(BaseSettings):
     supabase_service_role_key: Optional[str] = Field(default=None, repr=False)
     storage_bucket: str = "medical-documents"
     max_upload_size: int = 10 * 1024 * 1024
+    openai_api_key: Optional[str] = Field(default=None, repr=False)
+    openai_model: str = "gpt-4o-mini"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[2] / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @model_validator(mode="after")
     def validate_runtime_secrets(self) -> "Settings":
