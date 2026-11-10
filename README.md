@@ -2,10 +2,11 @@
 
 Healthcare in Your Language, Care for Everyone.
 
+<<<<<<< HEAD
 ArogyaMitra is a healthcare information and communication prototype for
 patients, healthcare workers, and administrators. It is not a diagnostic or
 prescribing system.
-
+=======
 ## Stack
 
 - Frontend: React, TypeScript, Vite, Axios
